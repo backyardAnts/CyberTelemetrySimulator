@@ -8,7 +8,7 @@ public class ConsolePublisher : ITelemetryPublisher
 {
     private readonly JsonSerializerOptions _options = new()
     {
-        WriteIndented = false,
+        WriteIndented = false,//lol
         Converters = { new JsonStringEnumConverter() }
     };
 
