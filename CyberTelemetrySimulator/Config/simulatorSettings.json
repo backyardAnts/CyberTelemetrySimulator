@@ -1,0 +1,7 @@
+{
+  "tickMs": 2000,
+  "attackChancePerTick": 0.10,
+  "minDurationSec": 20,
+  "maxDurationSec": 60,
+  "outputPath": "data/raw-telemetry.jsonl"
+}
