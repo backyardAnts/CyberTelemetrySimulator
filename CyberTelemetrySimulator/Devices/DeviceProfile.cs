@@ -18,7 +18,7 @@ public class DeviceProfile
     public (int Min, int Max) UniquePortsRange { get; init; }
     public (int Min, int Max) CpuUsageRange { get; init; }
 
-    public static DeviceProfile For(DeviceType type) => type switch
+    public static DeviceProfile For(DeviceType type) => type switch // there is a switch so it can choose what type of device profile to create based on the DeviceType passed in. Each case creates a new DeviceProfile with specific ranges for the metrics.
     {
         DeviceType.Workstation => new DeviceProfile
         {
