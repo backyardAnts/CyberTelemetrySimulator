@@ -4,9 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using CyberTelemetrySimulator.Models;
 
-public class FileJsonlPublisher : ITelemetryPublisher
+public class FileJsonlPublisher : ITelemetryPublisher //implement the publisher contract (it will include te async function)
 {
-    private readonly string _filePath;
+    private readonly string _filePath; //define the file path where data is going to be stored
     private readonly JsonSerializerOptions _options = new()
     {
         WriteIndented = false,
