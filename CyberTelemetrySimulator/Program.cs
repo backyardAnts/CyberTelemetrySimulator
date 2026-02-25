@@ -5,7 +5,7 @@ using CyberTelemetrySimulator.Devices;
 using CyberTelemetrySimulator.Models;
 using CyberTelemetrySimulator.Publishers;
 
-var settingsPath = Path.Combine(AppContext.BaseDirectory, "SimulatorSettings.json");
+var settingsPath = Path.Combine(AppContext.BaseDirectory, "Config", "simulatorSettings.json");
 var settingsJson = File.ReadAllText(settingsPath);
 var settings = JsonSerializer.Deserialize<SimulatorSettings>(settingsJson) ?? new SimulatorSettings();
 
