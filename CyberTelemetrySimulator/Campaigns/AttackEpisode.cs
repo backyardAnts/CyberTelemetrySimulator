@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 namespace CyberTelemetrySimulator.Campaigns;
 
 using CyberTelemetrySimulator.Models;
-
+//AttackEpisode.cs → a single “attack event” definition (type, start time, duration, intensity, target device(s)).
 public class AttackEpisode
 {
     public string AttackId { get; init; } = string.Empty;

@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace CyberTelemetrySimulator.Campaigns;
-
+//owns the list/queue of AttackEpisodes, decides what’s active right now, and tells AttackApplier what to apply.
 using CyberTelemetrySimulator.Models;
 
 public class CampaignManager

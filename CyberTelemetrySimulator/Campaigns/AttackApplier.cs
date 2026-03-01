@@ -8,7 +8,7 @@ namespace CyberTelemetrySimulator.Attacks;
 
 using CyberTelemetrySimulator.Campaigns;
 using CyberTelemetrySimulator.Models;
-
+//takes an AttackEpisode + current device metrics and mutates metrics + sets label (BruteForce / DDoS / etc.) for that tick/window.
 public static class AttackApplier
 {
     public static void Apply(Metrics m, AttackEpisode ep)
