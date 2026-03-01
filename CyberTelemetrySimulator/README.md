@@ -18,3 +18,11 @@ dotnet run --project CyberTelemetrySimulator
 ```
 dotnet run --project CyberTelemetrySimulator -- --self-check
 ```
+
+## SOC demo mode
+```
+dotnet run --project CyberTelemetrySimulator -- --soc --demo
+```
+
+- Alerts are written to `data/alerts.jsonl` under the app base directory.
+- Telemetry JSONL output remains in `data/raw-telemetry.jsonl`.

@@ -254,7 +254,8 @@ public class DeviceSimulator
             Metrics = metrics,
             Label = label,
             AttackId = attackId,
-            AttackMode = ep?.Mode
+            AttackMode = ep?.Mode,
+            IncidentId = ep?.IncidentId
         };
     }
 

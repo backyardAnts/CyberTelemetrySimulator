@@ -12,17 +12,30 @@ public class CampaignManager
 {
     private readonly Random _random = new();
     private readonly Dictionary<string, AttackEpisode> _active = new();
+    private readonly bool _incidentChainEnabled;
+    private readonly bool _demoMode;
+    private string? _incidentId;
+    private string? _incidentDeviceId;
+    private int _incidentStageIndex;
+    private bool _incidentCompleted;
 
     // Config knobs (we’ll move to Config later)
     private readonly double _attackChancePerTick; // chance to start an attack each telemetry tick
     private readonly int _minDurationSec;
     private readonly int _maxDurationSec;
 
-    public CampaignManager(double attackChancePerTick = 0.08, int minDurationSec = 20, int maxDurationSec = 90)
+    public CampaignManager(
+        double attackChancePerTick = 0.08,
+        int minDurationSec = 20,
+        int maxDurationSec = 90,
+        bool incidentChainEnabled = false,
+        bool demoMode = false)
     {
         _attackChancePerTick = attackChancePerTick;
         _minDurationSec = minDurationSec;
         _maxDurationSec = maxDurationSec;
+        _incidentChainEnabled = incidentChainEnabled;
+        _demoMode = demoMode;
     }
 
     public AttackEpisode? GetActiveEpisode(string deviceId, DateTime nowUtc)
@@ -39,6 +52,45 @@ public class CampaignManager
     {
         // If one already active, do nothing
         if (GetActiveEpisode(deviceId, nowUtc) != null) return null;
+
+        if (_incidentChainEnabled)
+        {
+            if (_incidentCompleted)
+            {
+                return null;
+            }
+
+            if (_incidentId == null)
+            {
+                var shouldStart = _demoMode || _random.NextDouble() <= _attackChancePerTick;
+
+                if (!shouldStart)
+                {
+                    return null;
+                }
+
+                _incidentId = $"inc_{Guid.NewGuid():N}".Substring(0, 10);
+                _incidentDeviceId = deviceId;
+                _incidentStageIndex = 0;
+            }
+
+            if (deviceId != _incidentDeviceId)
+            {
+                return null;
+            }
+
+            var stage = GetIncidentStage(_incidentStageIndex);
+            if (stage == null)
+            {
+                _incidentCompleted = true;
+                return null;
+            }
+
+            _incidentStageIndex++;
+            var episode = BuildEpisode(stage.Value, nowUtc, incidentId: _incidentId);
+            _active[deviceId] = episode;
+            return episode;
+        }
 
         // Start a new one with some probability
         if (_random.NextDouble() > _attackChancePerTick) return null;
@@ -72,6 +124,42 @@ public class CampaignManager
         // exclude Normal
         var options = new[] { AttackType.PortScan, AttackType.BruteForce, AttackType.DDoS, AttackType.Exfiltration };
         return options[_random.Next(options.Length)];
+    }
+
+    private (AttackType Type, AttackMode Mode, int MinSec, int MaxSec)? GetIncidentStage(int index)
+    {
+        return index switch
+        {
+            0 => (AttackType.PortScan, AttackMode.Stealth, 30, 90),
+            1 => (AttackType.BruteForce, AttackMode.Loud, 20, 60),
+            2 => (AttackType.Exfiltration, AttackMode.Stealth, 60, 180),
+            _ => null
+        };
+    }
+
+    private AttackEpisode BuildEpisode(
+        (AttackType Type, AttackMode Mode, int MinSec, int MaxSec) stage,
+        DateTime nowUtc,
+        string? incidentId)
+    {
+        var duration = _random.Next(stage.MinSec, stage.MaxSec + 1);
+        var intensity = RandomIntensity(stage.Mode, stage.Type);
+        var (clusters, clusterSize) = SourceIpClustering(stage.Type, stage.Mode);
+        var forceAfterHours = stage.Type == AttackType.Exfiltration && _random.NextDouble() < 0.6;
+
+        return new AttackEpisode
+        {
+            AttackId = $"attack_{Guid.NewGuid():N}".Substring(0, 12),
+            AttackType = stage.Type,
+            Mode = stage.Mode,
+            Intensity = intensity,
+            SourceIpClusters = clusters,
+            SourceIpsPerCluster = clusterSize,
+            ForceAfterHours = forceAfterHours,
+            IncidentId = incidentId,
+            StartUtc = nowUtc,
+            EndUtc = nowUtc.AddSeconds(duration)
+        };
     }
 
     private AttackMode RandomAttackMode(AttackType type)

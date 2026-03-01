@@ -17,6 +17,7 @@ public class AttackEpisode
     public int SourceIpClusters { get; init; }
     public int SourceIpsPerCluster { get; init; }
     public bool ForceAfterHours { get; init; }
+    public string? IncidentId { get; init; }
     public DateTime StartUtc { get; init; }
     public DateTime EndUtc { get; init; }
 
