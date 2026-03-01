@@ -13,4 +13,5 @@ public class TelemetryEvent
     public Metrics Metrics { get; set; } = new(); // to save the "monitored" metrics
     public AttackType Label { get; set; } = AttackType.Normal; //label set to default since it is the basic one
     public string? AttackId { get; set; } //? means the value can be optional (nullable) since normal telemetry won't have an attack ID
+    public AttackMode? AttackMode { get; set; }
 }

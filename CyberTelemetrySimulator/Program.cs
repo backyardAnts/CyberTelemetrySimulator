@@ -4,10 +4,17 @@ using CyberTelemetrySimulator.Campaigns;
 using CyberTelemetrySimulator.Devices;
 using CyberTelemetrySimulator.Models;
 using CyberTelemetrySimulator.Publishers;
+using CyberTelemetrySimulator.Validation;
 
 var settingsPath = Path.Combine(AppContext.BaseDirectory, "Config", "simulatorSettings.json"); //used to load conf settings from json file
 var settingsJson = File.ReadAllText(settingsPath); //read the JSON file content into a string
 var settings = JsonSerializer.Deserialize<SimulatorSettings>(settingsJson) ?? new SimulatorSettings(); //convert the JSON string into a SimulatorSettings object, if deserialization fails, create a new SimulatorSettings with default values
+
+if (args.Contains("--self-check", StringComparer.OrdinalIgnoreCase))
+{
+    TelemetrySelfCheck.Run();
+    return;
+}
 
 var campaigns = new CampaignManager( //attack scheduling manager, it will decide when to start an attack and what type based on the settings
     attackChancePerTick: settings.AttackChancePerTick, //gets the info from the settings file 

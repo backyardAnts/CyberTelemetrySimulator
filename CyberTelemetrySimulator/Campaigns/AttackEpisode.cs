@@ -12,6 +12,11 @@ public class AttackEpisode
 {
     public string AttackId { get; init; } = string.Empty;
     public AttackType AttackType { get; init; }
+    public AttackMode Mode { get; init; }
+    public double Intensity { get; init; } = 1.0;
+    public int SourceIpClusters { get; init; }
+    public int SourceIpsPerCluster { get; init; }
+    public bool ForceAfterHours { get; init; }
     public DateTime StartUtc { get; init; }
     public DateTime EndUtc { get; init; }
 

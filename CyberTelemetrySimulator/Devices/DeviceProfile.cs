@@ -12,7 +12,7 @@ public class DeviceProfile
 {
     public DeviceType DeviceType { get; init; }
 
-    // Normal ranges (baseline behavior)
+    // Normal ranges (used to seed and clamp per-device baselines)
     public (int Min, int Max) PacketRateRange { get; init; } //tupples used to store the range of each metric
     public (int Min, int Max) FailedLoginsRange { get; init; }
     public (int Min, int Max) SuccessfulLoginsRange { get; init; }
