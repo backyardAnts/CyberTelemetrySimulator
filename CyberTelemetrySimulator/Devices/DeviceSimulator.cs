@@ -32,13 +32,22 @@ public class DeviceSimulator
         {
             AveragePacketRate = NextInRange(_profile.PacketRateRange),
             TotalFailedLogins = NextInRange(_profile.FailedLoginsRange),
+            SuccessfulLogins = NextInRange(_profile.SuccessfulLoginsRange),
+            UniqueSourceIps = NextInRange(_profile.UniqueSourceIpsRange),
             UniquePortsAccessed = NextInRange(_profile.UniquePortsRange),
+            ConnectionAttemptsPerSecond = NextInRange(_profile.ConnectionAttemptsPerSecondRange),
+            AverageConnectionDurationMs = NextInRange(_profile.AverageConnectionDurationMsRange),
+            NewConnectionsPerSecond = NextInRange(_profile.NewConnectionsPerSecondRange),
+            TrafficVolumeBytes = NextInRange(_profile.TrafficVolumeBytesRange),
+            OutgoingBytes = NextInRange(_profile.OutgoingBytesRange),
+            IncomingBytes = NextInRange(_profile.IncomingBytesRange),
             AverageCpuUsage = NextInRange(_profile.CpuUsageRange),
             TimeOfDay = now.Hour
         };
 
         // Small noise to make it less “robotic”
         AddNoise(metrics);
+        UpdateDerivedMetrics(metrics);
 
         return new TelemetryEvent
         {
@@ -60,6 +69,22 @@ public class DeviceSimulator
         m.AveragePacketRate = Math.Max(0, m.AveragePacketRate + _random.Next(-10, 11));
         m.AverageCpuUsage = Math.Clamp(m.AverageCpuUsage + _random.Next(-3, 4), 0, 100);
     }
+
+    private void UpdateDerivedMetrics(Metrics m)
+    {
+        m.FailedLoginRate = m.TotalFailedLogins / 60.0;
+        m.FailedToSuccessRatio = m.SuccessfulLogins <= 0
+            ? 1.0
+            : (double)m.TotalFailedLogins / m.SuccessfulLogins;
+        m.OutgoingIncomingRatio = m.IncomingBytes <= 0
+            ? m.OutgoingBytes
+            : m.OutgoingBytes / m.IncomingBytes;
+
+        if (m.AfterHoursActivity == 0)
+        {
+            m.AfterHoursActivity = m.TimeOfDay < 6 || m.TimeOfDay > 20 ? 1 : 0;
+        }
+    }
     public TelemetryEvent GenerateTelemetry(CampaignManager campaigns)
     {
         var now = DateTime.UtcNow;
@@ -69,12 +94,21 @@ public class DeviceSimulator
         {
             AveragePacketRate = NextInRange(_profile.PacketRateRange),
             TotalFailedLogins = NextInRange(_profile.FailedLoginsRange),
+            SuccessfulLogins = NextInRange(_profile.SuccessfulLoginsRange),
+            UniqueSourceIps = NextInRange(_profile.UniqueSourceIpsRange),
             UniquePortsAccessed = NextInRange(_profile.UniquePortsRange),
+            ConnectionAttemptsPerSecond = NextInRange(_profile.ConnectionAttemptsPerSecondRange),
+            AverageConnectionDurationMs = NextInRange(_profile.AverageConnectionDurationMsRange),
+            NewConnectionsPerSecond = NextInRange(_profile.NewConnectionsPerSecondRange),
+            TrafficVolumeBytes = NextInRange(_profile.TrafficVolumeBytesRange),
+            OutgoingBytes = NextInRange(_profile.OutgoingBytesRange),
+            IncomingBytes = NextInRange(_profile.IncomingBytesRange),
             AverageCpuUsage = NextInRange(_profile.CpuUsageRange),
             TimeOfDay = now.Hour
         };
 
         AddNoise(metrics);
+        UpdateDerivedMetrics(metrics);
 
         // 2) Check if there is an active attack episode, or start one
         var ep = campaigns.GetActiveEpisode(DeviceId, now) ?? campaigns.TryStartEpisode(DeviceId, now);
@@ -89,6 +123,8 @@ public class DeviceSimulator
             label = ep.AttackType;
             attackId = ep.AttackId;
         }
+
+        UpdateDerivedMetrics(metrics);
 
         // 4) Build event
         return new TelemetryEvent
