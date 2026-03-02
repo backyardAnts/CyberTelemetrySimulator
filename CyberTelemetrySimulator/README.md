@@ -11,7 +11,7 @@ Generates labeled telemetry events for multiple device types and persists them a
 
 ## Run
 ```
-dotnet run --project CyberTelemetrySimulator
+dotnet run
 ```
 
 ## Training dataset mode
