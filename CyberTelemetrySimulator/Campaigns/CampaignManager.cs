@@ -10,8 +10,8 @@ using CyberTelemetrySimulator.Models;
 
 public class CampaignManager
 {
-    private readonly Random _random = new();
-    private readonly Dictionary<string, AttackEpisode> _active = new();
+    private readonly Random _random = new(); //random instance for generating random numbers
+    private readonly Dictionary<string, AttackEpisode> _active = new(); //dictionary to track active attack episodes by device ID
     private readonly bool _incidentChainEnabled;
     private readonly bool _demoMode;
     private string? _incidentId;

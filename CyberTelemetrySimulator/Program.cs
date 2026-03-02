@@ -62,28 +62,28 @@ while (true) //infinite loop that simulates the telemetry generation process. In
             continue;
         }
 
-        var detection = DetectionEngine.Evaluate(evnt);
-        var state = MapState(detection.RiskScore);
-        var emoji = state switch
+        var detection = DetectionEngine.Evaluate(evnt); //take one telemetry and check if it is malicicious or not
+        var state = MapState(detection.RiskScore); //maps the score to an actual state (normal, suspicious, under attack)
+        var emoji = state switch //chose an emoji for a state
         {
-            DeviceSecurityState.Normal => "🟢",
-            DeviceSecurityState.Suspicious => "🟠",
-            DeviceSecurityState.UnderAttack => "🔴",
-            _ => "🟢"
+            DeviceSecurityState.Normal => "Normal",
+            DeviceSecurityState.Suspicious => "Sus",
+            DeviceSecurityState.UnderAttack => "AHHHH",
+            _ => "Well IDK"
         };
-        var reasons = detection.Reasons.Length == 0 ? "none" : string.Join("; ", detection.Reasons);
-        var suspectedLabel = detection.SuspectedType?.ToString() ?? "None";
+        var reasons = detection.Reasons.Length == 0 ? "none" : string.Join("; ", detection.Reasons); //to get teh reasons
+        var suspectedLabel = detection.SuspectedType?.ToString() ?? "None"; //to get the suspected attack type, if there is one, otherwise "None"
         Console.WriteLine($"[{emoji}] {evnt.DeviceId} {evnt.DeviceType} Risk={detection.RiskScore} Suspected={suspectedLabel} Reasons={reasons}");
 
-        if (deviceStates != null)
+        if (deviceStates != null) //check if the device state is different from the previous state, if it is, update the state and publish an alert if the risk score is high enough or if the state changed to suspicious or under attack. 
         {
-            deviceStates.TryGetValue(evnt.DeviceId, out var previousState);
+            deviceStates.TryGetValue(evnt.DeviceId, out var previousState);//to get the devices pervious state
             if (previousState != state)
             {
-                deviceStates[evnt.DeviceId] = state;
+                deviceStates[evnt.DeviceId] = state; //if different change the state to the new one
             }
 
-            if (previousState != state || detection.RiskScore >= 70)
+            if (previousState != state || detection.RiskScore >= 70) //condition to actually raise the alert
             {
                 var alert = new SecurityAlert
                 {
@@ -93,11 +93,14 @@ while (true) //infinite loop that simulates the telemetry generation process. In
                     DeviceType = evnt.DeviceType,
                     IncidentId = evnt.IncidentId,
                     RiskScore = detection.RiskScore,
-                    Severity = detection.RiskScore >= 70 ? "Critical" : "Suspicious",
+                    Severity =
+                    detection.RiskScore >= 70 ? "Critical" :
+                    detection.RiskScore >= 40 ? "Suspicious" :
+                    "Info",
                     SuspectedType = detection.SuspectedType,
                     Reasons = detection.Reasons
                 };
-                if (alertPublisher != null)
+                if (alertPublisher != null) //if there is an alert publish it to alertpublisher
                 {
                     await alertPublisher.PublishAsync(alert);
                 }

@@ -13,6 +13,8 @@ public class SecurityAlert
     public int RiskScore { get; init; }
     public string Severity { get; init; } = string.Empty;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? AlertType { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public AttackType? SuspectedType { get; init; }
     public string[] Reasons { get; init; } = Array.Empty<string>();
 }

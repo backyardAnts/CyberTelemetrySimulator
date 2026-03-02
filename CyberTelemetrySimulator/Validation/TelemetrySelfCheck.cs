@@ -29,8 +29,7 @@ public static class TelemetrySelfCheck
     {
         var m = current.Metrics;
         var expected = m.IncomingBytes + m.OutgoingBytes;
-        var tolerance = Math.Max(500.0, expected * 0.05);
-        if (Math.Abs(m.TrafficVolumeBytes - expected) > tolerance)
+        if (m.TrafficVolumeBytes != expected)
         {
             throw new InvalidOperationException("TrafficVolumeBytes not consistent with IncomingBytes + OutgoingBytes.");
         }

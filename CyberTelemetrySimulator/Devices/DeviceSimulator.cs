@@ -198,9 +198,11 @@ public class DeviceSimulator
     private void UpdateDerivedMetrics(Metrics m, DateTime now, bool forceAfterHours)
     {
         // Derived values enforce internal consistency across raw metrics.
-        var volumeBase = m.IncomingBytes + m.OutgoingBytes;
-        var jitter = RandomDistributions.SampleNormal(_random, 0, volumeBase * 0.02);
-        m.TrafficVolumeBytes = Math.Max(0, volumeBase + jitter);
+        var incomingJitter = RandomDistributions.SampleNormal(_random, 0, m.IncomingBytes * 0.02);
+        var outgoingJitter = RandomDistributions.SampleNormal(_random, 0, m.OutgoingBytes * 0.02);
+        m.IncomingBytes = Math.Max(0, m.IncomingBytes + incomingJitter);
+        m.OutgoingBytes = Math.Max(0, m.OutgoingBytes + outgoingJitter);
+        m.TrafficVolumeBytes = m.IncomingBytes + m.OutgoingBytes;
 
         // FailedLoginRate is per-second from a 60-second window.
         m.FailedLoginRate = m.TotalFailedLogins / 60.0;

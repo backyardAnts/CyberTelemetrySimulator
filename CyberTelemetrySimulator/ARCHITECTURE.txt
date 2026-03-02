@@ -1,57 +1,156 @@
-CyberTelemetrySimulator Architecture
+CyberTelemetrySimulator — Project Structure Overview
+1️⃣ Application Entry
 
-Overview
-- The simulator generates telemetry events for a set of device instances.
-- Each telemetry event contains baseline metrics plus optional attack effects.
-- Events are published to the console and to a JSONL file for downstream use.
+Program.cs
+Application entry point.
+Initializes configuration, devices, campaign manager, detection engine, and publishers.
+Runs the telemetry generation loop and optionally enables SOC mode + alert generation.
 
-Core Flow
-1) Program entrypoint (Program.cs)
-   - Loads configuration from Config/simulatorSettings.json.
-   - Builds a CampaignManager for attack scheduling.
-   - Creates a list of DeviceSimulator instances for different device types.
-   - In a loop, generates telemetry and publishes it to multiple publishers.
+CyberTelemetrySimulator.csproj
+.NET project definition and dependency configuration.
 
-Configuration
-- Config/simulatorSettings.json defines tick interval, attack chance, attack duration bounds, and output path.
-- Config/SimulatorSettings.cs maps JSON into a strongly-typed settings object.
+2️⃣ Configuration
 
-Telemetry Model
-- Models/TelemetryEvent.cs is the envelope for each telemetry event.
-  - Timestamp, DeviceId, DeviceType, Metrics, Label (attack type), AttackId.
-- Models/Metrics.cs defines all telemetry metrics, including derived values.
-  - Baseline metrics are created per device; derived metrics are computed in DeviceSimulator.
+Config/SimulatorSettings.cs
+Strongly-typed configuration model for:
 
-Device Simulation
-- Devices/DeviceSimulator.cs
-  - Generates baseline metrics using the device profile ranges.
-  - Adds small noise for realism.
-  - If an attack is active, applies attack effects.
-  - Recomputes derived metrics (failed login rate, ratios, after-hours flag).
+Tick interval
 
-Device Profiles
-- Devices/DeviceProfile.cs defines baseline ranges per DeviceType.
-- DeviceType (Models/DeviceType.cs) enumerates device categories.
-- The profile ranges are used to generate normal telemetry for each device.
+Attack probability
 
-Attack Scheduling
-- Campaigns/CampaignManager.cs manages AttackEpisode lifecycles.
-  - Randomly starts attacks based on AttackChancePerTick.
-  - Keeps attacks active for MinDurationSec..MaxDurationSec.
-- Campaigns/AttackEpisode.cs stores the active attack state and progress.
+Attack duration bounds
 
-Attack Effects
-- Campaigns/AttackApplier.cs applies attack-specific effects to metrics.
-  - Brute force: failed logins, login ratios, unique source IPs.
-  - Port scan: unique ports, connection attempts, short durations.
-  - DDoS: packet rate, new connections, IP count, traffic volume spikes.
-  - Exfiltration: outgoing bytes spike, traffic ratio, after-hours flag.
+Output file paths
 
-Publishing
-- Publishers/ConsolePublisher.cs prints JSON telemetry to the console.
-- Publishers/FileJsonlPublisher.cs appends each event as a JSON line.
-- Both implement ITelemetryPublisher for consistent publishing.
+SOC mode settings
 
-Output
-- By default, telemetry is written to data/raw-telemetry.jsonl under the app base directory.
-- Each line is a complete JSON object representing one TelemetryEvent.
+Config/simulatorSettings.json
+Default runtime configuration values.
+
+3️⃣ Attack Campaign Management (Behavior Orchestration)
+
+These components simulate realistic cyber attack behavior over time.
+
+Campaigns/CampaignManager.cs
+Central scheduler responsible for:
+
+Starting and stopping attack episodes
+
+Managing active attacks per device
+
+Supporting optional SOC incident chains (multi-stage attacks)
+
+Campaigns/AttackEpisode.cs
+Represents a single attack window:
+
+Attack type
+
+Attack mode (Loud / Stealth)
+
+Start and end timing
+
+Optional incident correlation ID
+
+Campaigns/AttackApplier.cs
+Applies attack effects to device telemetry by mutating metrics during active attack windows.
+
+4️⃣ Device Simulation (Telemetry Generation)
+
+Responsible for producing realistic baseline telemetry.
+
+Devices/DeviceSimulator.cs
+Generates baseline metrics for a device and applies attack effects when active.
+
+Devices/DeviceProfile.cs
+Defines baseline metric ranges and behavioral characteristics per device type.
+
+5️⃣ Data Models (Telemetry Contracts)
+
+Defines all structured data exchanged within the system.
+
+Models/TelemetryEvent.cs
+Main telemetry envelope:
+
+Timestamp
+
+DeviceId
+
+DeviceType
+
+Metrics
+
+Attack label
+
+AttackId
+
+Models/Metrics.cs
+Defines all telemetry metrics including derived fields.
+
+Models/AttackType.cs
+Supported attack categories (BruteForce, PortScan, DDoS, DataExfiltration).
+
+Models/AttackMode.cs
+Attack intensity mode (Loud / Stealth).
+
+Models/DeviceType.cs
+Device categories (Workstation, WebServer, DatabaseServer, IoTDevice, etc.).
+
+Models/DeviceSecurityState.cs
+SOC state classification enum.
+
+Models/SecurityAlert.cs
+Schema for generated SOC alerts.
+
+6️⃣ Detection & Analytics Layer
+
+Implements simple attack detection logic and behavioral scoring.
+
+Detection/DetectionEngine.cs
+Performs:
+
+Risk scoring
+
+Behavioral anomaly evaluation
+
+Suspected attack classification
+
+Validation/TelemetrySelfCheck.cs
+Lightweight sanity checks to validate metric consistency.
+
+Utils/RandomDistributions.cs
+Statistical helpers (Poisson, Log-normal, AR(1)) used for realistic traffic modeling.
+
+7️⃣ Publishing Layer (Output Adapters)
+
+Responsible for exporting telemetry and alerts.
+
+Publishers/ITelemetryPublisher.cs
+Interface abstraction for telemetry output mechanisms.
+
+Publishers/ConsolePublisher.cs
+Writes telemetry to console output.
+
+Publishers/FileJsonlPublisher.cs
+Appends telemetry events to a JSONL file for downstream processing.
+
+Publishers/AlertJsonlPublisher.cs
+Writes SOC alert events to JSONL format.
+
+8️⃣ Documentation
+
+README.md
+Usage instructions, SOC demo mode explanation, and run configuration.
+
+ARCHITECTURE.txt
+High-level system architecture description.
+
+🔎 Architectural Flow (Conceptual Overview)
+DeviceSimulator
+        ↓
+CampaignManager → AttackApplier
+        ↓
+TelemetryEvent
+        ↓
+DetectionEngine
+        ↓
+Publishers (Console / JSONL / Alerts)

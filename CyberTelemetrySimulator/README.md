@@ -6,7 +6,7 @@ Generates labeled telemetry events for multiple device types and persists them a
 - Persistent per-device baselines with slow drift instead of full re-randomization every tick.
 - Poisson count modeling, log-normal byte volumes, and AR(1) smoothing for CPU/packet rates.
 - Time-of-day and weekday/weekend activity multipliers by device type.
-- Internal-consistency rules for traffic totals and derived ratios.
+- Internal-consistency rules for traffic totals and derived ratios (TrafficVolumeBytes equals IncomingBytes + OutgoingBytes).
 - Loud vs stealth attack modes with correlated metric changes.
 
 ## Run
@@ -24,5 +24,5 @@ dotnet run --project CyberTelemetrySimulator -- --self-check
 dotnet run --project CyberTelemetrySimulator -- --soc --demo
 ```
 
-- Alerts are written to `data/alerts.jsonl` under the app base directory.
+- Alerts are written to `data/alerts.jsonl` under the app base directory. State-change notifications emit `Severity` "Info" with `AlertType` "StateChange".
 - Telemetry JSONL output remains in `data/raw-telemetry.jsonl`.
