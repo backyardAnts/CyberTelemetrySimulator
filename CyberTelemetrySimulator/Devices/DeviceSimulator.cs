@@ -7,6 +7,7 @@ using CyberTelemetrySimulator.Campaigns;
 using CyberTelemetrySimulator.Attacks;
 namespace CyberTelemetrySimulator.Devices;
 
+using CyberTelemetrySimulator.Config;
 using CyberTelemetrySimulator.Models;
 using CyberTelemetrySimulator.Utils;
 
@@ -17,14 +18,22 @@ public class DeviceSimulator
     private readonly DeviceBaseline _baseline;
     private double _packetRateState;
     private double _cpuUsageState;
+    private readonly int _businessHoursStart;
+    private readonly int _businessHoursEnd;
+    private readonly double _dayBaselineMultiplier;
+    private readonly double _nightBaselineMultiplier;
 
     public string DeviceId { get; }
     public DeviceType DeviceType { get; }
 
-    public DeviceSimulator(string deviceId, DeviceType deviceType)
+    public DeviceSimulator(string deviceId, DeviceType deviceType, SimulatorSettings? settings = null)
     {
         DeviceId = deviceId;
         DeviceType = deviceType;
+        _businessHoursStart = NormalizeHour(settings?.BusinessHoursStart ?? 9);
+        _businessHoursEnd = NormalizeHour(settings?.BusinessHoursEnd ?? 17);
+        _dayBaselineMultiplier = Math.Max(0.1, settings?.DayBaselineMultiplier ?? 1.3);
+        _nightBaselineMultiplier = Math.Max(0.1, settings?.NightBaselineMultiplier ?? 0.7);
         _profile = DeviceProfile.For(deviceType);
         _baseline = InitializeBaseline();
         _packetRateState = _baseline.PacketRate;
@@ -98,7 +107,13 @@ public class DeviceSimulator
     private Metrics GenerateBaselineMetrics(DateTime now)
     {
         ApplyBaselineDrift();
-        var activity = GetActivityMultiplier(now, DeviceType);
+        var activity = GetActivityMultiplier(
+            now,
+            DeviceType,
+            _businessHoursStart,
+            _businessHoursEnd,
+            _dayBaselineMultiplier,
+            _nightBaselineMultiplier);
 
         // AR(1) smoothing keeps rate/CPU evolution realistic between ticks.
 
@@ -146,7 +161,13 @@ public class DeviceSimulator
         };
     }
 
-    private static double GetActivityMultiplier(DateTime now, DeviceType deviceType)
+    private static double GetActivityMultiplier(
+        DateTime now,
+        DeviceType deviceType,
+        int businessHoursStart,
+        int businessHoursEnd,
+        double dayBaselineMultiplier,
+        double nightBaselineMultiplier)
     {
         var hour = now.Hour + now.Minute / 60.0;
         var weekday = now.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday;
@@ -172,7 +193,13 @@ public class DeviceSimulator
             };
         }
 
-        return baseMultiplier;
+        var timeOfDayMultiplier = GetTimeOfDayBaselineMultiplier(
+            now,
+            businessHoursStart,
+            businessHoursEnd,
+            dayBaselineMultiplier,
+            nightBaselineMultiplier);
+        return baseMultiplier * timeOfDayMultiplier;
     }
 
     private static double DayNightCurve(double hour, double nightMin, double dayMax)
@@ -182,17 +209,57 @@ public class DeviceSimulator
         return nightMin + (dayMax - nightMin) * normalized;
     }
 
-    private static bool IsAfterHours(DateTime now, DeviceType deviceType)
+    private static double GetTimeOfDayBaselineMultiplier(
+        DateTime now,
+        int businessHoursStart,
+        int businessHoursEnd,
+        double dayBaselineMultiplier,
+        double nightBaselineMultiplier)
     {
         var hour = now.Hour;
-        return deviceType switch
+        if (IsNightHour(hour))
         {
-            DeviceType.Workstation => hour < 7 || hour >= 19,
-            DeviceType.WebServer => hour < 6 || hour >= 22,
-            DeviceType.DatabaseServer => hour < 6 || hour >= 22,
-            DeviceType.IoTDevice => false,
-            _ => hour < 7 || hour >= 19
-        };
+            return nightBaselineMultiplier;
+        }
+
+        if (IsWithinBusinessHours(hour, businessHoursStart, businessHoursEnd))
+        {
+            return dayBaselineMultiplier;
+        }
+
+        return 1.0;
+    }
+
+    private static bool IsAfterHours(DateTime now, int businessHoursStart, int businessHoursEnd)
+    {
+        return !IsWithinBusinessHours(now.Hour, businessHoursStart, businessHoursEnd);
+    }
+
+    private static bool IsWithinBusinessHours(int hour, int businessHoursStart, int businessHoursEnd)
+    {
+        if (businessHoursStart == businessHoursEnd)
+        {
+            return true;
+        }
+
+        if (businessHoursStart < businessHoursEnd)
+        {
+            return hour >= businessHoursStart && hour < businessHoursEnd;
+        }
+
+        return hour >= businessHoursStart || hour < businessHoursEnd;
+    }
+
+    private static bool IsNightHour(int hour)
+    {
+        return hour >= 0 && hour < 6;
+    }
+
+    private static int NormalizeHour(int hour)
+    {
+        if (hour < 0) return 0;
+        if (hour > 23) return 23;
+        return hour;
     }
 
     private void UpdateDerivedMetrics(Metrics m, DateTime now, bool forceAfterHours)
@@ -220,7 +287,7 @@ public class DeviceSimulator
         }
         else
         {
-            m.AfterHoursActivity = IsAfterHours(now, DeviceType) ? 1 : 0;
+            m.AfterHoursActivity = IsAfterHours(now, _businessHoursStart, _businessHoursEnd) ? 1 : 0;
         }
     }
     public TelemetryEvent GenerateTelemetry(CampaignManager campaigns)

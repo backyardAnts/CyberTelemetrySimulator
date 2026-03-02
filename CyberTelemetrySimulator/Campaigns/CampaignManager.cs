@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace CyberTelemetrySimulator.Campaigns;
 //owns the list/queue of AttackEpisodes, decides what’s active right now, and tells AttackApplier what to apply.
+using CyberTelemetrySimulator.Config;
 using CyberTelemetrySimulator.Models;
 
 public class CampaignManager
@@ -18,6 +21,24 @@ public class CampaignManager
     private string? _incidentDeviceId;
     private int _incidentStageIndex;
     private bool _incidentCompleted;
+    private readonly bool _balancedDatasetMode;
+    private readonly bool _trainingDatasetMode;
+    private readonly int _trainingEpisodeDurationSec;
+    private readonly int _businessHoursStart;
+    private readonly int _businessHoursEnd;
+    private readonly double _afterHoursAttackMultiplier;
+    private readonly Dictionary<AttackType, double> _targetRatios;
+    private readonly int? _totalEventsTarget;
+    private readonly Dictionary<AttackType, int> _generatedCounts;
+    private int _eventsGenerated;
+    private readonly AttackType[] _trainingOrder =
+    {
+        AttackType.BruteForce,
+        AttackType.PortScan,
+        AttackType.DDoS,
+        AttackType.Exfiltration
+    };
+    private int _trainingIndex;
 
     // Config knobs (we’ll move to Config later)
     private readonly double _attackChancePerTick; // chance to start an attack each telemetry tick
@@ -29,20 +50,50 @@ public class CampaignManager
         int minDurationSec = 20,
         int maxDurationSec = 90,
         bool incidentChainEnabled = false,
-        bool demoMode = false)
+        bool demoMode = false,
+        bool? balancedDatasetMode = null,
+        bool? trainingDatasetMode = null,
+        Dictionary<string, double>? targetClassRatios = null,
+        int? totalEventsTarget = null,
+        int? trainingEpisodeDurationSec = null,
+        int? businessHoursStart = null,
+        int? businessHoursEnd = null,
+        double? afterHoursAttackMultiplier = null)
     {
         _attackChancePerTick = attackChancePerTick;
         _minDurationSec = minDurationSec;
         _maxDurationSec = maxDurationSec;
         _incidentChainEnabled = incidentChainEnabled;
         _demoMode = demoMode;
+        var settings = LoadSettings();
+        _balancedDatasetMode = balancedDatasetMode ?? settings?.BalancedDatasetMode ?? false;
+        _trainingDatasetMode = trainingDatasetMode ?? settings?.TrainingDatasetMode ?? false;
+        _trainingEpisodeDurationSec = trainingEpisodeDurationSec ?? settings?.TrainingEpisodeDurationSec ?? 60;
+        _businessHoursStart = NormalizeHour(businessHoursStart ?? settings?.BusinessHoursStart ?? 9);
+        _businessHoursEnd = NormalizeHour(businessHoursEnd ?? settings?.BusinessHoursEnd ?? 17);
+        _afterHoursAttackMultiplier = Math.Max(0.1, afterHoursAttackMultiplier ?? settings?.AfterHoursAttackMultiplier ?? 2.0);
+        _targetRatios = ResolveTargetRatios(targetClassRatios ?? settings?.TargetClassRatios);
+        _totalEventsTarget = totalEventsTarget ?? settings?.TotalEventsTarget;
+        _generatedCounts = Enum.GetValues<AttackType>().ToDictionary(type => type, _ => 0);
+        if (_balancedDatasetMode)
+        {
+            Console.WriteLine("[CampaignManager] BalancedDatasetMode enabled.");
+        }
+        if (_trainingDatasetMode)
+        {
+            Console.WriteLine("[CampaignManager] TrainingDatasetMode enabled.");
+        }
     }
 
     public AttackEpisode? GetActiveEpisode(string deviceId, DateTime nowUtc)
     {
         if (_active.TryGetValue(deviceId, out var ep))
         {
-            if (ep.IsActive(nowUtc)) return ep;
+            if (ep.IsActive(nowUtc))
+            {
+                IncrementCount(ep.AttackType);
+                return ep;
+            }
             _active.Remove(deviceId); // expired
         }
         return null;
@@ -53,10 +104,37 @@ public class CampaignManager
         // If one already active, do nothing
         if (GetActiveEpisode(deviceId, nowUtc) != null) return null;
 
+        if (_trainingDatasetMode)
+        {
+            var trainingType = NextTrainingAttackType();
+            var trainingMode = RandomAttackMode(trainingType);
+            var trainingIntensity = RandomIntensity(trainingMode, trainingType);
+            var (trainingClusters, trainingClusterSize) = SourceIpClustering(trainingType, trainingMode);
+            var trainingForceAfterHours = trainingType == AttackType.Exfiltration && _random.NextDouble() < (trainingMode == AttackMode.Stealth ? 0.7 : 0.4);
+
+            var trainingEpisode = new AttackEpisode
+            {
+                AttackId = $"attack_{Guid.NewGuid():N}".Substring(0, 12),
+                AttackType = trainingType,
+                Mode = trainingMode,
+                Intensity = trainingIntensity,
+                SourceIpClusters = trainingClusters,
+                SourceIpsPerCluster = trainingClusterSize,
+                ForceAfterHours = trainingForceAfterHours,
+                StartUtc = nowUtc,
+                EndUtc = nowUtc.AddSeconds(_trainingEpisodeDurationSec)
+            };
+
+            _active[deviceId] = trainingEpisode;
+            IncrementCount(trainingEpisode.AttackType);
+            return trainingEpisode;
+        }
+
         if (_incidentChainEnabled)
         {
             if (_incidentCompleted)
             {
+                IncrementCount(AttackType.Normal);
                 return null;
             }
 
@@ -66,6 +144,7 @@ public class CampaignManager
 
                 if (!shouldStart)
                 {
+                    IncrementCount(AttackType.Normal);
                     return null;
                 }
 
@@ -76,6 +155,7 @@ public class CampaignManager
 
             if (deviceId != _incidentDeviceId)
             {
+                IncrementCount(AttackType.Normal);
                 return null;
             }
 
@@ -83,17 +163,65 @@ public class CampaignManager
             if (stage == null)
             {
                 _incidentCompleted = true;
+                IncrementCount(AttackType.Normal);
                 return null;
             }
 
             _incidentStageIndex++;
             var episode = BuildEpisode(stage.Value, nowUtc, incidentId: _incidentId);
             _active[deviceId] = episode;
+            IncrementCount(episode.AttackType);
             return episode;
         }
 
+        if (_balancedDatasetMode)
+        {
+            var balancedType = SelectBalancedAttackType();
+            if (balancedType == null)
+            {
+                IncrementCount(AttackType.Normal);
+                return null;
+            }
+
+            Console.WriteLine($"[CampaignManager] Balanced selection: {balancedType}");
+
+            var balancedDuration = _random.Next(_minDurationSec, _maxDurationSec + 1);
+            var balancedMode = RandomAttackMode(balancedType.Value);
+            var balancedIntensity = RandomIntensity(balancedMode, balancedType.Value);
+            var (balancedClusters, balancedClusterSize) = SourceIpClustering(balancedType.Value, balancedMode);
+            var balancedForceAfterHours = balancedType.Value == AttackType.Exfiltration && _random.NextDouble() < (balancedMode == AttackMode.Stealth ? 0.7 : 0.4);
+
+            var balancedEpisode = new AttackEpisode
+            {
+                AttackId = $"attack_{Guid.NewGuid():N}".Substring(0, 12),
+                AttackType = balancedType.Value,
+                Mode = balancedMode,
+                Intensity = balancedIntensity,
+                SourceIpClusters = balancedClusters,
+                SourceIpsPerCluster = balancedClusterSize,
+                ForceAfterHours = balancedForceAfterHours,
+                StartUtc = nowUtc,
+                EndUtc = nowUtc.AddSeconds(balancedDuration)
+            };
+
+            _active[deviceId] = balancedEpisode;
+            IncrementCount(balancedEpisode.AttackType);
+            return balancedEpisode;
+        }
+
         // Start a new one with some probability
-        if (_random.NextDouble() > _attackChancePerTick) return null;
+        var attackChance = _attackChancePerTick;
+        if (IsAfterHours(nowUtc))
+        {
+            attackChance *= _afterHoursAttackMultiplier;
+        }
+
+        attackChance = Math.Clamp(attackChance, 0.0, 1.0);
+        if (_random.NextDouble() > attackChance)
+        {
+            IncrementCount(AttackType.Normal);
+            return null;
+        }
 
         var duration = _random.Next(_minDurationSec, _maxDurationSec + 1);
         var type = RandomAttackType();
@@ -116,7 +244,15 @@ public class CampaignManager
         };
 
         _active[deviceId] = ep;
+        IncrementCount(ep.AttackType);
         return ep;
+    }
+
+    private AttackType NextTrainingAttackType()
+    {
+        var attackType = _trainingOrder[_trainingIndex];
+        _trainingIndex = (_trainingIndex + 1) % _trainingOrder.Length;
+        return attackType;
     }
 
     private AttackType RandomAttackType()
@@ -124,6 +260,160 @@ public class CampaignManager
         // exclude Normal
         var options = new[] { AttackType.PortScan, AttackType.BruteForce, AttackType.DDoS, AttackType.Exfiltration };
         return options[_random.Next(options.Length)];
+    }
+
+    private AttackType? SelectBalancedAttackType()
+    {
+        var totalSoFar = _generatedCounts.Values.Sum();
+        var targetTotal = _totalEventsTarget.HasValue
+            ? Math.Max(_totalEventsTarget.Value, totalSoFar + 1)
+            : totalSoFar + 1;
+
+        AttackType? selected = null;
+        var bestDeficit = 0.0;
+
+        foreach (var attackType in new[] { AttackType.PortScan, AttackType.BruteForce, AttackType.DDoS, AttackType.Exfiltration })
+        {
+            var ratio = _targetRatios.TryGetValue(attackType, out var targetRatio) ? targetRatio : 0.0;
+            var targetCount = ratio * targetTotal;
+            var deficit = targetCount - _generatedCounts[attackType];
+            if (deficit <= 0.0)
+            {
+                continue;
+            }
+
+            if (deficit > bestDeficit + 1e-6)
+            {
+                bestDeficit = deficit;
+                selected = attackType;
+                continue;
+            }
+
+            if (selected.HasValue && Math.Abs(deficit - bestDeficit) <= 1e-6 && attackType < selected.Value)
+            {
+                selected = attackType;
+            }
+        }
+
+        return selected;
+    }
+
+    private void IncrementCount(AttackType attackType)
+    {
+        _generatedCounts[attackType] = _generatedCounts[attackType] + 1;
+        _eventsGenerated++;
+        if (_eventsGenerated % 1000 == 0)
+        {
+            Console.WriteLine($"[CampaignManager] Counts @ {_eventsGenerated}: {FormatCounts()}");
+        }
+    }
+
+    private bool IsAfterHours(DateTime nowUtc)
+    {
+        return !IsWithinBusinessHours(nowUtc.Hour, _businessHoursStart, _businessHoursEnd);
+    }
+
+    private static bool IsWithinBusinessHours(int hour, int businessHoursStart, int businessHoursEnd)
+    {
+        if (businessHoursStart == businessHoursEnd)
+        {
+            return true;
+        }
+
+        if (businessHoursStart < businessHoursEnd)
+        {
+            return hour >= businessHoursStart && hour < businessHoursEnd;
+        }
+
+        return hour >= businessHoursStart || hour < businessHoursEnd;
+    }
+
+    private static int NormalizeHour(int hour)
+    {
+        if (hour < 0) return 0;
+        if (hour > 23) return 23;
+        return hour;
+    }
+
+    private string FormatCounts()
+    {
+        return string.Join(", ", _generatedCounts.Select(kvp => $"{kvp.Key}={kvp.Value}"));
+    }
+
+    private static Dictionary<AttackType, double> ResolveTargetRatios(Dictionary<string, double>? rawRatios)
+    {
+        var defaults = new Dictionary<AttackType, double>
+        {
+            [AttackType.Normal] = 0.65,
+            [AttackType.BruteForce] = 0.12,
+            [AttackType.PortScan] = 0.12,
+            [AttackType.DDoS] = 0.06,
+            [AttackType.Exfiltration] = 0.05
+        };
+
+        if (rawRatios == null || rawRatios.Count == 0)
+        {
+            return new Dictionary<AttackType, double>(defaults);
+        }
+
+        var parsed = new Dictionary<AttackType, double>();
+        foreach (var (key, value) in rawRatios)
+        {
+            if (!Enum.TryParse<AttackType>(key, true, out var attackType))
+            {
+                continue;
+            }
+
+            if (value <= 0)
+            {
+                continue;
+            }
+
+            parsed[attackType] = value;
+        }
+
+        var attackSum = parsed.Where(kvp => kvp.Key != AttackType.Normal).Sum(kvp => kvp.Value);
+        if (!parsed.ContainsKey(AttackType.Normal))
+        {
+            parsed[AttackType.Normal] = attackSum > 0 && attackSum < 1.0
+                ? 1.0 - attackSum
+                : defaults[AttackType.Normal];
+        }
+
+        foreach (var (attackType, ratio) in defaults)
+        {
+            if (!parsed.ContainsKey(attackType))
+            {
+                parsed[attackType] = ratio;
+            }
+        }
+
+        var total = parsed.Values.Sum();
+        if (total <= 0)
+        {
+            return new Dictionary<AttackType, double>(defaults);
+        }
+
+        return parsed.ToDictionary(kvp => kvp.Key, kvp => kvp.Value / total);
+    }
+
+    private static SimulatorSettings? LoadSettings()
+    {
+        var settingsPath = Path.Combine(AppContext.BaseDirectory, "Config", "simulatorSettings.json");
+        if (File.Exists(settingsPath))
+        {
+            var settingsJson = File.ReadAllText(settingsPath);
+            return JsonSerializer.Deserialize<SimulatorSettings>(settingsJson);
+        }
+
+        var cwdSettingsPath = Path.Combine(Directory.GetCurrentDirectory(), "Config", "simulatorSettings.json");
+        if (File.Exists(cwdSettingsPath))
+        {
+            var settingsJson = File.ReadAllText(cwdSettingsPath);
+            return JsonSerializer.Deserialize<SimulatorSettings>(settingsJson);
+        }
+
+        return null;
     }
 
     private (AttackType Type, AttackMode Mode, int MinSec, int MaxSec)? GetIncidentStage(int index)

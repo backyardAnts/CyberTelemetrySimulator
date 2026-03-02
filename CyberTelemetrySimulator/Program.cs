@@ -19,29 +19,42 @@ if (args.Contains("--self-check", StringComparer.OrdinalIgnoreCase))
 
 var socMode = args.Contains("--soc", StringComparer.OrdinalIgnoreCase);
 var demoMode = args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
+var trainingMode = args.Contains("--training", StringComparer.OrdinalIgnoreCase);
 
 var campaigns = new CampaignManager( //attack scheduling manager, it will decide when to start an attack and what type based on the settings
     attackChancePerTick: settings.AttackChancePerTick, //gets the info from the settings file 
     minDurationSec: settings.MinDurationSec,
     maxDurationSec: settings.MaxDurationSec,
     incidentChainEnabled: socMode || demoMode,
-    demoMode: demoMode
+    demoMode: demoMode,
+    trainingDatasetMode: trainingMode || settings.TrainingDatasetMode,
+    trainingEpisodeDurationSec: settings.TrainingEpisodeDurationSec,
+    businessHoursStart: settings.BusinessHoursStart,
+    businessHoursEnd: settings.BusinessHoursEnd,
+    afterHoursAttackMultiplier: settings.AfterHoursAttackMultiplier
 );
 
-var devices = new List<DeviceSimulator> //list of simulated devices, each with a unique ID and type. The DeviceSimulator class will use the DeviceProfile to generate telemetry data based on the device type and any active attack episodes.
+var devices = new List<DeviceSimulator>(); //list of simulated devices, each with a unique ID and type. The DeviceSimulator class will use the DeviceProfile to generate telemetry data based on the device type and any active attack episodes.
 
+for (int i = 1; i <= 220; i++)
 {
-    new("WS-01", DeviceType.Workstation),
-    new("WS-02", DeviceType.Workstation),
-    new("WEB-01", DeviceType.WebServer),
-    new("DB-01", DeviceType.DatabaseServer),
-    new("IOT-01", DeviceType.IoTDevice),
-    new("IOT-02", DeviceType.IoTDevice),
-    new("WEB-02", DeviceType.WebServer),
-    new("WS-03", DeviceType.Workstation),
-    new("DB-02", DeviceType.DatabaseServer),
-    new("WS-04", DeviceType.Workstation),
-};
+    devices.Add(new DeviceSimulator($"WS-{i:D3}", DeviceType.Workstation, settings));
+}
+
+for (int i = 1; i <= 90; i++)
+{
+    devices.Add(new DeviceSimulator($"WEB-{i:D3}", DeviceType.WebServer, settings));
+}
+
+for (int i = 1; i <= 60; i++)
+{
+    devices.Add(new DeviceSimulator($"DB-{i:D3}", DeviceType.DatabaseServer, settings));
+}
+
+for (int i = 1; i <= 30; i++)
+{
+    devices.Add(new DeviceSimulator($"IOT-{i:D3}", DeviceType.IoTDevice, settings));
+}
 
 ITelemetryPublisher consolePub = new ConsolePublisher(); //publisher that outputs telemetry events to the console
 ITelemetryPublisher filePub = new FileJsonlPublisher(settings.OutputPath); //publisher that appends telemetry events as JSON lines to a specified file. The OutputPath is obtained from the settings, allowing for flexible configuration of where the telemetry data should be stored.
