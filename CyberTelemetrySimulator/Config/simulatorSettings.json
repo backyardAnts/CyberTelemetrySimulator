@@ -12,6 +12,7 @@
   "dayBaselineMultiplier": 1.3,
   "nightBaselineMultiplier": 0.7,
   "afterHoursAttackMultiplier": 2.0,
+  "iotHubDeviceConnectionString": "",
   "targetClassRatios": {
     "Normal": 0.65,
     "BruteForce": 0.12,

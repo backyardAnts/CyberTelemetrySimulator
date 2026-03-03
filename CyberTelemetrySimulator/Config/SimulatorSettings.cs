@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace CyberTelemetrySimulator.Config;
 
@@ -12,11 +12,12 @@ public class SimulatorSettings
     public bool BalancedDatasetMode { get; set; } = false;
     public bool TrainingDatasetMode { get; set; } = false;
     public int TrainingEpisodeDurationSec { get; set; } = 60;
-    public int BusinessHoursStart { get; set; } = 9;
+    public int BusinessHoursStart { get; set; } = 8;
     public int BusinessHoursEnd { get; set; } = 17;
     public double DayBaselineMultiplier { get; set; } = 1.3;
     public double NightBaselineMultiplier { get; set; } = 0.7;
     public double AfterHoursAttackMultiplier { get; set; } = 2.0;
+    public string? IotHubDeviceConnectionString { get; set; }
     public Dictionary<string, double> TargetClassRatios { get; set; } = new()
     {
         ["Normal"] = 0.65,

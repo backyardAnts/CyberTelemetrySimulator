@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using CyberTelemetrySimulator.Config;
 using CyberTelemetrySimulator.Campaigns;
 using CyberTelemetrySimulator.Devices;
@@ -20,6 +20,7 @@ if (args.Contains("--self-check", StringComparer.OrdinalIgnoreCase))
 var socMode = args.Contains("--soc", StringComparer.OrdinalIgnoreCase);
 var demoMode = args.Contains("--demo", StringComparer.OrdinalIgnoreCase);
 var trainingMode = args.Contains("--training", StringComparer.OrdinalIgnoreCase);
+var iotHubEnabled = args.Contains("--iot-hub", StringComparer.OrdinalIgnoreCase);
 
 var campaigns = new CampaignManager( //attack scheduling manager, it will decide when to start an attack and what type based on the settings
     attackChancePerTick: settings.AttackChancePerTick, //gets the info from the settings file 
@@ -61,6 +62,23 @@ ITelemetryPublisher filePub = new FileJsonlPublisher(settings.OutputPath); //pub
 var alertPublisher = socMode ? new AlertJsonlPublisher("data/alerts.jsonl") : null;
 var deviceStates = socMode ? new Dictionary<string, DeviceSecurityState>() : null;
 
+AzureIotHubPublisher? iotHubPublisher = null;
+if (iotHubEnabled)
+{
+    var iotHubConnectionString = Environment.GetEnvironmentVariable("IOT_HUB_DEVICE_CONNECTION_STRING");
+    if (string.IsNullOrWhiteSpace(iotHubConnectionString))
+    {
+        iotHubConnectionString = settings.IotHubDeviceConnectionString;
+    }
+
+    if (string.IsNullOrWhiteSpace(iotHubConnectionString))
+    {
+        Console.WriteLine("Missing IoT Hub device connection string. Set IOT_HUB_DEVICE_CONNECTION_STRING or Config/simulatorSettings.json (iotHubDeviceConnectionString).");
+        return;
+    }
+
+    iotHubPublisher = new AzureIotHubPublisher(iotHubConnectionString);
+}
 
 while (true) //infinite loop that simulates the telemetry generation process. In each iteration, it goes through all the devices, generates a telemetry event for each device based on the current active attack episodes (if any), and publishes the event using both the console and file publishers.
 {
@@ -68,6 +86,11 @@ while (true) //infinite loop that simulates the telemetry generation process. In
     {
         var evnt = d.GenerateTelemetry(campaigns);
         await filePub.PublishAsync(evnt); //publish content on file, the file publisher will append the telemetry event as a JSON line
+
+        if (iotHubPublisher != null)
+        {
+            await iotHubPublisher.PublishAsync(evnt);
+        }
 
         if (!socMode)
         {

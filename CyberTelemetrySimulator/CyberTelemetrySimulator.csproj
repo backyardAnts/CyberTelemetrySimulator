@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -8,13 +8,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Folder Include="Attacks\" />
+    <Folder Include="Attacks\\" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Config\simulatorSettings.json">
+    <None Update="Config\\simulatorSettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Azure.Devices.Client" Version="1.41.0" />
   </ItemGroup>
 
 </Project>
